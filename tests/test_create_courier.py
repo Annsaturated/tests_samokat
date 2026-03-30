@@ -1,9 +1,14 @@
 import allure
 import pytest
 import requests
-from test_data import CourierData
+from test_data import CourierData 
 from courier_helpers import register_new_courier_and_return_login_password
+from api.courier_api import CourierApi
+from conftest import BASE_URL
 
+class ErrorMessages:
+    LOGIN_ALREADY_USED = "Этот логин уже используется"
+    INSUFFICIENT_DATA = "Недостаточно данных для создания учетной записи"
 
 @allure.feature("Создание курьера")
 class TestCreateCourier:
@@ -11,6 +16,7 @@ class TestCreateCourier:
     @allure.title("Позитивный тест: создание курьера")
     @allure.description("Проверяем, что курьера можно успешно создать")
     def test_create_courier_success(self):
+        courier_api = CourierApi(BASE_URL)
         result  = register_new_courier_and_return_login_password()
         assert result, "Курьер должен быть создан"
         assert len(result) == 4
@@ -21,10 +27,12 @@ class TestCreateCourier:
         assert create_response.status_code == 201
         assert create_response.json() == {"ok": True}
         
-        
+        courier_api.delete_courier_by_credentials(login, password)
+
     @allure.title("Негативный тест: создание дубликата курьера")
     @allure.description("Проверяем, что нельзя создать двух одинаковых курьеров")
-    def test_create_duplicate_courier(self, base_url):
+    def test_create_duplicate_courier(self):
+        courier_api = CourierApi(BASE_URL)
         result = register_new_courier_and_return_login_password()
         assert result, "Не удалось создать первого курьера"
         
@@ -35,33 +43,31 @@ class TestCreateCourier:
         payload["password"] = password
         payload["firstName"] = first_name
         
-        create_response = requests.post(
-            f"{base_url}/api/v1/courier",
-            json=payload
-        )
+        create_response = courier_api.create_courier(payload)
         
         assert create_response.status_code == 409
-        assert "Этот логин уже используется" in create_response.text
+        assert ErrorMessages.LOGIN_ALREADY_USED in create_response.text
         
+        courier_api.delete_courier_by_credentials(login, password)
        
     @allure.title("Негативный тест: создание курьера без обязательных полей")
     @pytest.mark.parametrize("payload,expected_message", [
         (
             CourierData.courier_without_login(),
-            "Недостаточно данных для создания учетной записи"
+            ErrorMessages.INSUFFICIENT_DATA
         ),
         (
             CourierData.courier_without_password(),
-            "Недостаточно данных для создания учетной записи"
+            ErrorMessages.INSUFFICIENT_DATA
         ),
         (
             CourierData.courier_without_firstname(),
-            "Недостаточно данных для создания учетной записи"
+            ErrorMessages.INSUFFICIENT_DATA
         ),
     ])
-    def test_create_courier_missing_fields(self, base_url, payload, expected_message):
+    def test_create_courier_missing_fields(self, payload, expected_message):
         response = requests.post(
-            f"{base_url}/api/v1/courier",
+            f"{BASE_URL}/api/v1/courier",
             json=payload
         )
         
@@ -70,7 +76,7 @@ class TestCreateCourier:
     
     @allure.title("Негативный тест: создание курьера с уже существующим логином")
     @allure.description("Проверяем, что если создать пользователя с логином, который уже есть, возвращается ошибка")
-    def test_create_courier_existing_login(self, base_url):
+    def test_create_courier_existing_login(self):
         courier_data = register_new_courier_and_return_login_password()
         assert courier_data, "Не удалось создать первого курьера"
         
@@ -79,9 +85,9 @@ class TestCreateCourier:
         payload = CourierData.courier_with_existing_login(login)
         
         response = requests.post(
-            f"{base_url}/api/v1/courier",
+            f"{BASE_URL}/api/v1/courier",
             json=payload
         )
         
-        assert "Этот логин уже используется" in response.text
+        assert ErrorMessages.LOGIN_ALREADY_USED in response.text
     

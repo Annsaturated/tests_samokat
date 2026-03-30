@@ -2,6 +2,8 @@ import allure
 import pytest
 import requests
 from test_data import OrderData
+from api.order_api import OrderAPI
+from conftest import BASE_URL
 
 
 @allure.feature("Создание заказа")
@@ -15,12 +17,11 @@ class TestCreateOrder:
         OrderData.order_with_both_colors(),
         OrderData.order_without_color()
     ])
-    def test_create_order_with_colors(self, base_url, order_data):
+    def test_create_order_with_colors(self, order_data):
+
+        order_api = OrderAPI(BASE_URL) 
         
-        response = requests.post(
-            f"{base_url}/api/v1/orders",
-            json=order_data
-        )
+        response = order_api.create_order(order_data) 
         
         assert response.status_code == 201
         assert "track" in response.json()
